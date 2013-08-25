@@ -19,27 +19,21 @@
       // Return the resulting indexes of a sort so we can apply
       // this result elsewhere. This returns an array of index numbers.
       // return[0] = x means "arr's 0th element is now at x"
-      var sort_map = function(arr, sort_function, reverse_column) {
+      var sort_map = function(arr, sort_function) {
         var map = [];
         var index = 0;
-        if (reverse_column) {
-          for (var i = arr.length-1; i >= 0; i--) {
-            map.push(i);
-          }
-        }
-        else {
-          var sorted = arr.slice(0).sort(sort_function);
-          for (var i=0; i<arr.length; i++) {
+        var sorted = arr.slice(0).sort(sort_function);
+        for (var i=0; i<arr.length; i++) {
             index = $.inArray(arr[i], sorted);
 
             // If this index is already in the map, look for the next index.
             // This handles the case of duplicate entries.
             while ($.inArray(index, map) != -1) {
-              index++;
+                index++;
             }
             map.push(index);
-          }
         }
+
         return map;
       };
 
@@ -58,27 +52,21 @@
       //                  Begin execution!                    //
       // ==================================================== //
 
-      // Do sorting when THs are clicked
-      $table.on("click", "th", function() {
+      $table.on("sorttable", function(event, data) {
         var trs = $table.children("tbody").children("tr");
-        var $this = $(this);
-        var th_index = 0;
+        var th_index = data.column;
+        var $th = $table.find("th:eq("+th_index+")");
         var dir = $.fn.stupidtable.dir;
 
-        $table.find("th").slice(0, $this.index()).each(function() {
-          var cols = $(this).attr("colspan") || 1;
-          th_index += parseInt(cols,10);
-        });
-
         // Determine (and/or reverse) sorting direction, default `asc`
-        var sort_dir = $this.data("sort-dir") === dir.ASC ? dir.DESC : dir.ASC;
-
-        // Choose appropriate sorting function. If we're sorting descending, check
-        // for a `data-sort-desc` attribute.
-        if ( sort_dir == dir.DESC )
-          var type = $this.data("sort-desc") || $this.data("sort") || null;
-        else
-          var type = $this.data("sort") || null;
+        var sort_dir = data.direction;
+        if (!sort_dir) {
+            sort_dir = $th.data("sort-default") || dir.ASC;
+            if ($th.data("sort-dir"))
+               sort_dir = $th.data("sort-dir") === dir.ASC ? dir.DESC : dir.ASC;
+        }
+        // Choose appropriate sorting function. 
+        var type = $th.data("sort") || null;
 
         // Prevent sorting if no type defined
         if (type === null) {
@@ -110,12 +98,15 @@
           // Create the sort map. This column having a sort-dir implies it was
           // the last column sorted. As long as no data-sort-desc is specified,
           // we're free to just reverse the column.
-          var reverse_column = !!$this.data("sort-dir") && !$this.data("sort-desc");
-          var theMap = sort_map(column, sortMethod, reverse_column);
+          var theMap;
+          if (sort_dir == dir.ASC)
+            theMap = sort_map(column, sortMethod);
+          else
+            theMap = sort_map(column, function(a, b) { return -sortMethod(a, b); });
 
           // Reset siblings
           $table.find("th").data("sort-dir", null).removeClass("sorting-desc sorting-asc");
-          $this.data("sort-dir", sort_dir).addClass("sorting-"+sort_dir);
+          $th.data("sort-dir", sort_dir).addClass("sorting-"+sort_dir);
 
           // Replace the content of tbody with the sortedTRs. Strangely (and
           // conveniently!) enough, .append accomplishes this for us.
@@ -128,9 +119,23 @@
           $table.css("display");
         }, 10);
       });
+      
+      // Do sorting when THs are clicked
+      $table.on("click", "th", function() {
+        var $this = $(this);
+        var th_index = 0;
+
+        $table.find("th").slice(0, $this.index()).each(function() {
+          var cols = $(this).attr("colspan") || 1;
+          th_index += parseInt(cols,10);
+        });
+
+        $table.trigger("sorttable",{column:th_index});
+      });
+      
     });
   };
-
+  
   // Enum containing sorting directions
   $.fn.stupidtable.dir = {ASC: "asc", DESC: "desc"};
 
